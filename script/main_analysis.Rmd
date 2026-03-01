@@ -1,0 +1,865 @@
+---
+title: "Project10"
+author: "Kuete Tchinda Jaures"
+date: "2026-01-29"
+output: html_document
+---
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+```{r }
+
+# Reproducibility
+set.seed(123)
+
+# Load required libraries
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+
+# Load data
+data_raw <- read_excel("ENB2012_data.xlsx")
+
+# First look
+str(data_raw)
+summary(data_raw)
+
+```
+
+## Including Plots
+
+5.1.2 Variable-Namen sauber machen
+
+```{r }
+# Rename variables for clarity
+data <- data_raw %>%
+  rename(
+    Relative_Compactness = X1,
+    Surface_Area        = X2,
+    Wall_Area           = X3,
+    Roof_Area           = X4,
+    Overall_Height      = X5,
+    Orientation         = X6,
+    Glazing_Area        = X7,
+    Glazing_Distribution= X8,
+    Heating_Load        = Y1,
+    Cooling_Load        = Y2
+  )
+
+```
+
+```{r }
+# check Missing values
+colSums(is.na(data))
+
+```
+
+5.1.3 Datentypen prüfen (sehr wichtig für spätere Tests!)
+
+```{r }
+# Check structure again
+str(data)
+```
+
+```{r }
+# Check structure of variable to change in cathegorical
+unique(data$Glazing_Distribution)
+table(data$Glazing_Distribution)
+
+unique(data$Orientation)
+table(data$Orientation)
+
+# [1] 0 1 2 3 4 5
+
+```
+
+```{r }
+# change variable Glazing_Distribution in cathegorical
+
+data <- data %>%
+  mutate(
+    
+    Glazing_Distribution = factor(Glazing_Distribution,
+                                  levels = c(0, 1, 2, 3, 4, 5),
+                                  labels = c("Uniform", "North", "East", "South", "West", "Unknown")
+                                  )
+  )
+
+str(data)
+
+
+```
+
+```{r }
+
+# change variable Orientation in cathegorical
+data <- data %>%
+  mutate(
+    Orientation = factor(Orientation,
+                         levels = c(2, 3, 4, 5),
+                         labels = c("North", "East", "South", "West")
+                         )
+  )
+
+```
+
+```{r }
+str(data)
+table(data$Orientation)
+table(data$Glazing_Distribution)
+
+```
+
+```{r }
+# Check missing values
+colSums(is.na(data))
+
+```
+
+```{r }
+# store Numerical features in variable num_vars
+num_vars <- data %>%
+  select(
+    Relative_Compactness,
+    Surface_Area,
+    Wall_Area,
+    Roof_Area,
+    Overall_Height,
+    Glazing_Area
+  )
+
+# image correlation matrix of numeric Variables
+cor_mat <- cor(num_vars, use = "pairwise.complete.obs")
+
+image(
+  1:ncol(cor_mat),
+  1:nrow(cor_mat),
+  cor_mat,
+  axes = FALSE,
+  main = "Correlation Heatmap (Numeric Variables)"
+)
+axis(1, at = 1:ncol(cor_mat), labels = colnames(cor_mat), las = 2)
+axis(2, at = 1:nrow(cor_mat), labels = rownames(cor_mat), las = 2)
+
+```
+
+```{r }
+# correlation matrix
+cor_mat
+```
+
+Laut correlation matrix Roof_Area und Overall_Height  korreliert stark (|coef| > 0.95), Um dieses Problem yu lösen, entscheiden wir die Variable Roof_Area zu löschen.
+
+```{r }
+# Remove Roof_Area from data
+data <- data %>% select(-Roof_Area)
+```
+
+
+Exploratory Data Analysis (EDA)
+
+```{r }
+# Summary statistics
+summary(data %>% select(Heating_Load, Cooling_Load))
+
+```
+
+Verteilungen der Heiz- und Kühllast
+
+```{r }
+# plot Distribution Heating_Load
+ggplot(data, aes(x = Heating_Load)) +
+  geom_histogram(bins = 30) +
+  labs(title = "Distribution of Heating Load",
+       x = "Heating Load",
+       y = "Frequency")
+
+```
+
+
+```{r }
+# plot Distribution Cooling_Load
+ggplot(data, aes(x = Cooling_Load)) +
+  geom_histogram(bins = 30) +
+  labs(title = "Distribution of Cooling Load",
+       x = "Cooling Load",
+       y = "Frequency")
+```
+
+
+Einfluss einzelner Design-Variablen
+
+```{r }
+num_design_vars <- c(
+  "Relative_Compactness",
+  "Surface_Area",
+  "Wall_Area",
+  "Overall_Height",
+  "Glazing_Area"
+)
+```
+
+```{r }
+
+# plot numerische design Vriable vs Heating_Load and Cooling Load to get influence of each design Variable on both reponse ouput
+
+for (var in num_design_vars) {
+
+  # Heating Load
+  print(
+    ggplot(data, aes_string(x = var, y = "Heating_Load")) +
+      geom_point(alpha = 0.5) +
+      geom_smooth(method = "loess", se = FALSE) +
+      labs(
+        title = paste("Heating Load vs", var),
+        x = var,
+        y = "Heating Load"
+      )
+  )
+
+  # Cooling Load
+  print(
+    ggplot(data, aes_string(x = var, y = "Cooling_Load")) +
+      geom_point(alpha = 0.5) +
+      geom_smooth(method = "loess", se = FALSE) +
+      labs(
+        title = paste("Cooling Load vs", var),
+        x = var,
+        y = "Cooling Load"
+      )
+  )
+}
+```
+
+Einfluss Kategoriale Variablen auf ouput variables (Heating and Cooling Load))(mit Labels)
+
+```{r }
+# Boxplot Heating Load by Orientation to get influence of Orientation on reponse ouput Heating Load
+ggplot(data, aes(x = Orientation, y = Heating_Load)) +
+  geom_boxplot() +
+  labs(title = "Heating Load by Orientation",
+       x = "Orientation",
+       y = "Heating Load")
+
+```
+
+```{r }
+
+# Boxplot Cooling Load by Orientation to get influence of Orientation on response ouput Cooling Load
+
+ggplot(data, aes(x = Orientation, y = Cooling_Load)) +
+  geom_boxplot() +
+  labs(title = "Cooling Load by Orientation",
+       x = "Orientation",
+       y = "Cooling Load")
+
+```
+
+```{r }
+
+# Boxplot Heating Load by Glazing Distribution to get influence of Glazing Distribution on both reponse Heating Load
+
+ggplot(data, aes(x = Glazing_Distribution, y = Heating_Load)) +
+  geom_boxplot() +
+  labs(title = "Heating Load by Glazing Distribution",
+       x = "Glazing Distribution",
+       y = "Heating Load")
+
+```
+
+```{r }
+
+# Boxplot Cooling Load by Glazing Distribution to get influence of Glazing Distribution on response ouput Cooling Load
+
+ggplot(data, aes(x = Glazing_Distribution, y = Cooling_Load)) +
+  geom_boxplot() +
+  labs(title = "Cooling Load by Glazing Distribution",
+       x = "Glazing Distribution",
+       y = "Cooling Load")
+
+```
+
+```{r }
+
+# Boxplot Heating Load by Building Height to get influence of Glazing Distribution on response ouput Heating Load
+
+ggplot(data, aes(x = factor(Overall_Height), y = Heating_Load)) +
+  geom_boxplot() +
+  labs(title = "Heating Load by Building Height",
+       x = "Overall Height",
+       y = "Heating Load")
+
+```
+
+
+```{r }
+
+# Boxplot Heating Load by Building Height to get influence of Glazing Distribution on response ouput Cooling Load
+
+ggplot(data, aes(x = factor(Overall_Height), y = Cooling_Load)) +
+  geom_boxplot() +
+  labs(title = "Cooling Load by Building Height",
+       x = "Overall Height",
+       y = "Cooling Load")
+
+```
+
+Distributional Analysis and Probability
+
+```{r }
+# Comparison density Heating and Cooling Load in Plot
+ggplot(data) +
+  geom_density(aes(x = Heating_Load), linetype = "solid") +
+  geom_density(aes(x = Cooling_Load), linetype = "dashed") +
+  labs(title = "Density Comparison: Heating vs Cooling Load",
+       x = "Load",
+       y = "Density")
+
+```
+
+Zusammenhang zwischen Heating und Cooling Load
+
+```{r }
+
+# Discover the Relationship between heating load and cooling load
+ggplot(data, aes(x = Heating_Load, y = Cooling_Load)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_minimal() +
+  labs(title = "Heating Load vs Cooling Load",
+       x = "Heating Load",
+       y = "Cooling Load")
+
+```
+
+Korrelation zwischen Heating und Cooling Load
+
+```{r }
+cor(data$Heating_Load, data$Cooling_Load, method = "spearman")
+
+```
+
+```{r }
+library(mclust)
+gmm_fit_heat <- Mclust(data$Heating_Load, G = 2, modelNames = "V")  # V = unequal variances
+
+summary(gmm_fit_heat)
+
+# Extract parameters
+pi_hat_heat <- gmm_fit_heat$parameters$pro     # mixing proportions (pi1, pi2)
+mu_hat_heat <- gmm_fit_heat$parameters$mean    # means (mu1, mu2)
+sd_hat_heat <- sqrt(gmm_fit_heat$parameters$variance$sigmasq)  # sds (sigma1, sigma2)
+
+
+names(pi_hat_heat) <- names(mu_hat_heat) <- names(sd_hat_heat) <- c("Comp1", "Comp2")
+
+cat("\nEstimated mixture parameters:\n")
+print(data.frame(
+  Component = names(pi_hat_heat),
+  pi_heating       = pi_hat_heat,
+  mu_heating        = mu_hat_heat,
+  sigma_heating     = sd_hat_heat
+))
+
+# -----------------------------
+# 4. Mixture CDF and Survival Functions
+# -----------------------------
+
+# Mixture CDF: P(Y <= y0)
+p_mix_cdf <- function(y0, pi, mu, sigma) {
+  sum(pi * pnorm(y0, mean = mu, sd = sigma))
+}
+
+# Mixture Survival: P(Y > y0)
+p_mix_surv <- function(y0, pi, mu, sigma) {
+  1 - p_mix_cdf(y0, pi, mu, sigma)
+}
+
+# Mixture Interval Probability: P(a < Y < b)
+p_mix_interval <- function(a, b, pi, mu, sigma) {
+  sum(pi * (pnorm(b, mean = mu, sd = sigma) -
+              pnorm(a, mean = mu, sd = sigma)))
+}
+
+
+# -----------------------------
+# 5. Example Probability Queries
+# -----------------------------
+
+p_y_gt_3_heat  <- p_mix_surv(30, pi_hat_heat, mu_hat_heat, sd_hat_heat)
+p_y_lt_3_heat  <- p_mix_cdf(10,  pi_hat_heat, mu_hat_heat, sd_hat_heat)
+p_3_5_heat     <- p_mix_interval(10, 25, pi_hat_heat, mu_hat_heat, sd_hat_heat)
+
+cat("\nMixture-based probabilities of heating_load :\n")
+cat("P(Y > 30)     =", round(p_y_gt_3_heat,  4), "\n")
+cat("P(Y < 10)     =", round(p_y_lt_3_heat,  4), "\n")
+cat("P(10 < Y < 25) =", round(p_3_5_heat,     4), "\n")
+
+
+```
+
+Hypothesis Testing
+
+Hypothese 1:
+
+H₀ (Nullhypothese):
+The mean Heating Load is the same for low-rise and high-rise buildings.
+
+H₁ (Alternativhypothese):
+The mean Heating Load differs between low-rise and high-rise buildings.
+
+```{r }
+# Gruppierungsvariable erstellen
+data$Height_Group <- ifelse(
+  data$Overall_Height <= median(data$Overall_Height),
+  "low",
+  "high"
+)
+
+data$Height_Group <- factor(data$Height_Group)
+
+table(data$Height_Group)
+```
+```{r}
+
+#  Zwei-Stichproben-t-Test
+
+t.test(
+  Heating_Load ~ Height_Group,
+  data = data
+)
+
+```
+
+Hypothese 2 – Surface Area
+
+H₀:
+Surface Area has no association with Heating Load.
+
+H₁:
+Surface Area is associated with Heating Load.
+
+Empfohlener Test: spearman-Rangkorrelation (robust, monotoner Zusammenhang, exakt wie in der Vorlesung)
+
+```{r }
+# correlation test of Surface Area and Heating Load with Spearman 
+
+cor_glazing <- cor.test(
+  data$Surface_Area,
+  data$Heating_Load,
+  method = "spearman",
+  exact = FALSE
+)
+
+cor_glazing
+
+```
+
+Schritt 5.5 – Supervised Learning
+
+```{r }
+# Ouput Variable
+y <- data$Heating_Load
+
+# Select only Design Variable without response Output to build our trainning Data
+X <- data %>%
+  select(
+    Relative_Compactness,
+    Surface_Area,
+    Wall_Area,
+    Overall_Height,
+    Orientation,
+    Glazing_Area,
+    Glazing_Distribution
+  )
+
+```
+
+```{r }
+set.seed(123)
+
+n <- nrow(data)
+
+# splitt our Data into train (80%) and test set (20%) 
+train_index <- sample(seq_len(n), size = 0.8 * n)
+
+X_train <- X[train_index, ]
+X_test  <- X[-train_index, ]
+
+y_train <- y[train_index]
+y_test  <- y[-train_index]
+
+```
+
+```{r }
+# Error Measurement function
+rmse <- function(y, yhat) sqrt(mean((y - yhat)^2))
+mae  <- function(y, yhat) mean(abs(y - yhat))
+```
+
+```{r }
+# Modell fitten
+
+lm_model <- lm(
+  y_train ~.,
+  data = X_train
+)
+
+summary(lm_model)
+
+```
+
+
+```{r }
+# Prediction on Testdata
+
+y_pred_lm <- predict(lm_model, newdata = X_test)
+```
+
+```{r }
+# compute the error measurement of lm model
+rmse_lm <- rmse(y_test, y_pred_lm)
+mae_lm  <- mae(y_test, y_pred_lm)
+
+mae_lm
+rmse_lm
+
+```
+
+Modell 2 – Ridge Regression (Regularisierung)
+
+```{r }
+library(glmnet)
+
+# Design-Matrix (Dummy-Codierung)
+X_train_mat <- model.matrix(~ ., data = X_train)[, -1]
+X_test_mat  <- model.matrix(~ ., data = X_test)[, -1]
+
+```
+
+Cross-Validation für Lambda
+
+```{r }
+set.seed(123)
+
+cv_ridge <- cv.glmnet(
+  X_train_mat,
+  y_train,
+  alpha = 0   # Ridge
+)
+
+best_lambda_ridge <- cv_ridge$lambda.min
+best_lambda_ridge
+```
+
+Modell fitten & vorhersagen
+
+```{r }
+ridge_model <- glmnet(
+  X_train_mat,
+  y_train,
+  alpha = 0,
+  lambda = best_lambda_ridge
+)
+
+y_pred_ridge <- predict(
+  ridge_model,
+  s = best_lambda_ridge,
+  newx = X_test_mat
+)
+
+```
+
+Modellgüte
+
+```{r }
+# compute the error measurement of ridge model
+
+rmse_ridge <- rmse(y_test, y_pred_ridge)
+mae_ridge  <- mae(y_test, y_pred_ridge)
+
+mae_ridge
+rmse_ridge
+
+```
+
+Lasso Regression
+
+```{r }
+cv_lasso <- cv.glmnet(
+  X_train_mat,
+  y_train,
+  alpha = 1
+)
+
+best_lambda_lasso <- cv_lasso$lambda.min
+
+lasso_model <- glmnet(
+  X_train_mat,
+  y_train,
+  alpha = 1,
+  lambda = best_lambda_lasso
+)
+
+y_pred_lasso <- predict(
+  lasso_model,
+  s = best_lambda_lasso,
+  newx = X_test_mat
+)
+
+# compute the error measurement of lasso regression
+rmse_lasso <- rmse(y_test, y_pred_lasso)
+mae_lasso  <- mae(y_test, y_pred_lasso)
+
+mae_lasso
+rmse_lasso
+
+```
+
+```{r }
+library(randomForest)
+
+set.seed(123)
+
+rf_model <- randomForest(
+  x = X_train,
+  y = y_train,
+  ntree = 500,
+  mtry = floor(sqrt(ncol(X_train))),
+  importance = TRUE
+)
+
+rf_model
+```
+
+
+```{r }
+y_pred_rf <- predict(rf_model, newdata = X_test)
+```
+
+```{r }
+
+# compute the error measurement of RandomForest Modell
+rmse_rf <- rmse(y_test, y_pred_rf)
+mae_rf  <- mae(y_test, y_pred_rf)
+
+
+mae_rf
+rmse_rf
+```
+
+
+```{r }
+# Modell comparison
+
+results <- data.frame(
+  Model = c(
+    "Linear Regression",
+    "Ridge Regression",
+    "Lasso Regression",
+    "Random Forest"
+  ),
+  RMSE = c(
+    rmse_lm,
+    rmse_ridge,
+    rmse_lasso,
+    rmse_rf
+  ),
+  MAE = c(
+    mae_lm,
+    mae_ridge,
+    mae_lasso,
+    mae_rf
+  )
+)
+
+results
+
+
+```
+The best model is Random Forest because it has the smallest RMSE and MAE.
+
+
+Unsupervised Learning: 
+
+Variablenauswahl für Clustering
+
+```{r }
+# Choose Variable numerische Variable for Unsupervised Learning 
+
+cluster_data <- data %>%
+  select(
+    Relative_Compactness,
+    Surface_Area,
+    Wall_Area,
+    Overall_Height,
+    Glazing_Area,
+  )
+
+```
+
+Skalierung (zwingend für Clustering!)
+
+```{r }
+# scale of numerische Variable to make it comparable without mistake 
+cluster_scaled <- scale(cluster_data)
+dist_mat <- dist(cluster_scaled, method = "euclidean")
+
+```
+
+
+```{r }
+
+# Build and Plot Dendograme to have a first Idea of number of Cluster
+
+hc <- hclust(dist_mat, method = "ward.D2")
+
+plot(
+  hc,
+  labels = FALSE,
+  main = "Hierarchical Clustering Dendrogram",
+  xlab = "",
+  sub = ""
+)
+
+
+
+```
+
+
+```{r }
+cluster_hc <- cutree(hc, k = 2)
+table(cluster_hc)
+
+```
+
+K-Means Clustering: Wahl der Clusteranzahl (Elbow Method)
+
+```{r }
+set.seed(123)
+
+# choose of  K Value of  K-Means with Elbow Method 
+
+wss <- sapply(1:10, function(k) {
+  kmeans(cluster_scaled, centers = k, nstart = 25)$tot.withinss
+})
+
+plot(
+  1:10, wss, type = "b",
+  xlab = "Number of Clusters",
+  ylab = "Within-Cluster Sum of Squares",
+  main = "Elbow Method for K-Means"
+)
+
+```
+
+K-Means mit k = 2
+
+```{r }
+set.seed(123)
+
+# Build a K-Means Algorithm with K = 2
+km <- kmeans(
+  cluster_scaled,
+  centers = 2,
+  nstart = 25
+)
+
+table(km$cluster)
+
+```
+
+Cluster-Zugehörigkeit zum Datensatz hinzufügen
+
+```{r }
+  
+data_clustered <- data %>%
+  mutate(
+    Cluster_HC = factor(cluster_hc),
+    Cluster_KMeans = factor(km$cluster)
+  )
+
+```
+
+
+```{r }
+data_clustered 
+table(data_clustered$Cluster_HC, data_clustered$Cluster_KMeans)
+
+```
+
+
+Cluster-Profil (numerisch)
+
+```{r }
+
+# Add Cluster-Profil to each Observation
+
+aggregate(
+  data_clustered %>%
+    select(
+      Relative_Compactness,
+      Surface_Area,
+      Wall_Area,
+      Overall_Height,
+      Glazing_Area
+    ),
+  by = list(Cluster = data_clustered$Cluster_KMeans),
+  FUN = mean
+)
+
+```
+
+Visualisierung: Cluster vs Heating Load
+
+PCA durchführen (nur numerische Variablen!)
+
+```{r }
+# find the Principal Components of Data to reduce the data size 
+pca <- prcomp(cluster_scaled, center = TRUE, scale. = FALSE)
+summary(pca)$importance[ , 1:5] 
+```
+
+```{r }
+
+# find the Principal Components
+
+pca
+```
+
+PCA-Ergebnisse mit Clustern kombinieren
+
+```{r }
+pca_df <- data.frame(
+  PC1 = pca$x[, 1],
+  PC2 = pca$x[, 2],
+  Cluster = factor(cluster_hc),
+  Heating_Load = data$Heating_Load
+)
+str(pca_df)
+```
+
+Scatterplot im PCA-Raum
+
+```{r }
+
+# Visualisation of Cluster in PCA Space
+
+ggplot(pca_df,
+       aes(x = PC1, y = PC2, color = Cluster)) +
+  geom_point(alpha = 0.6) +
+  labs(
+    title = "Cluster Visualisation in PCA Space",
+    x = "Principal Component 1",
+    y = "Principal Component 2",
+    color = "Cluster"
+  ) +
+  theme_minimal()
+
+```
